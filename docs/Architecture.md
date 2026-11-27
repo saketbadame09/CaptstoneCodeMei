@@ -26,7 +26,7 @@ Filters must compose with existing criteria and preserve backward compatibility.
 | --- | --- |
 | Add amenity filters: Free Wim‑Fi, Breakfast included | Domain enum for amenities; infra query mapping; API contract supports many values |
 | Add property type filters: Hotel, Villa | Domain enum for property type; infra query mapping |
-| Selecting both Amenities and Property Type returns results matching all selected criteria | Define semantics: AND across categories; AND (universal) within amenities |
+| Selecting both Amenities and Property Type returns results matching all selected criteria | Define semantics: AND across categories; amenities require ALL selected values (AND) |
 | When no accommodations match, display “No results found” | API returns empty list (and optional total); client shows no-results UI |
 | Existing filters still work | Add optional fields only; no breaking changes |
 
@@ -48,6 +48,7 @@ Rationale: scope is limited to adding filters; microservices are not justified. 
 **Fact:** The requirements do not specify the current stack.
 
 **Decision options (pros/cons):**
+
 
 ### Option A — SQL database filtering (Postgres/MySQL)
 - Pros: simpler operations, strong consistency, easier to test/deploy

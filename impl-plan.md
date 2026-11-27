@@ -1,10 +1,9 @@
 # Document Information
 
 - **Title:** impl-plan.md — Advanced Accommodation Search Filters
-- **Status:** Draft for human review (planning only)
+- **Status:** Updated after Phase 0 decision closure (planning only)
 - **Repo:** https://github.com/saketbadame09/CaptstoneCodeMei
 - **Target branch:** `feature/advanced-accommodation-filters-requirements`
-- **PR branch:** `feature/advanced-accommodation-filters-impl-plan`
 - **Last updated:** 2026-11-27
 
 ---
@@ -15,7 +14,7 @@
 2. Ensure backward compatibility: existing search works unchanged when new filters are omitted.
 3. Include validation, error handling, logging/observability, security/abuse guardrails, and a test strategy.
 4. Maintain traceability from implementation tasks to requirements/architecture/design-review.
-5. Avoid inventing technology choices; keep undecided architecture topics as open questions.
+5. Avoid inventing business rules beyond approved documents; keep undecided items as open questions.
 
 ---
 
@@ -23,11 +22,13 @@
 
 Ordered by authority as applied in this repo:
 
-1. **Approved requirements:** `requirement.md` (repo uses singular filename)
-2. **Approved architecture:** `docs/Architecture.md` (explicitly marked DRAFT and contains open questions)
+1. **Approved requirements:** `requirement.md`
+2. **Approved architecture:** `docs/Architecture.md` (contains open questions; treat only confirmed items as decisions)
 3. **Approved design review:** `docs/design-review.md` (Approved with conditions; captures key decisions)
-4. **Conversation decisions:**
-   - Use repo/branch `feature/advanced-accommodation-filters-requirements` as the base.
+4. **Conversation decisions (human-approved):**
+   - Implementation stack: **Java (Spring Boot)**
+   - Persistence: **PostgreSQL**
+   - Endpoint path: **`/accommodations/search`** (confirmed)
 
 ---
 
@@ -39,21 +40,21 @@ Ordered by authority as applied in this repo:
    - **Amenities multi-select = ALL (AND)** within amenities (design-review decision).
    - **propertyType = single-select**; multi-value is **HTTP 400** (design-review decision).
 3. **Edge validation**: allowlist enums; reject invalid values early with 400.
-4. **Layer separation** per architecture intent: controller/transport ↔ application/use-case ↔ domain ↔ infra/query.
-5. **Observability**: structured logs for request/validation failures (no PII); metrics-ready.
-6. **Performance guardrails**: enforce pagination bounds and reasonable filter size limits.
+4. **Layer separation** per architecture intent: controller/transport ↔ application/use-case ↔ domain ↔ infra/persistence.
+5. **Observability**: structured logs for request/validation failures (no PII); request-id correlation.
+6. **Performance guardrails**: enforce pagination bounds, max filter cardinality, DB indexes.
 
 ---
 
 # Technical Work Breakdown Structure
 
-**Epic:** Advanced Filters in Accommodation Search
+**Epic:** Advanced Filters in Accommodation Search (greenfield Spring Boot service)
 
-1. Contract & validation
-2. Domain model (enums/criteria)
-3. Application use-case updates
-4. Infrastructure query/repository updates (backend-dependent)
-5. Data model/migrations (if needed)
+1. Repository & solution setup (Spring Boot, build, config)
+2. API contract & validation
+3. Domain model (enums/criteria)
+4. Persistence layer (Postgres schema, JPA/SQL queries)
+5. Use-case/service wiring
 6. Tests (unit/integration/contract/non-functional)
 7. Documentation & CI verification
 
@@ -61,236 +62,220 @@ Ordered by authority as applied in this repo:
 
 # Implementation Phases
 
-> Important: This branch currently contains only documentation files (no application code). Phase 0 includes discovery to locate/merge the actual service code before concrete file-level work can proceed.
-
-- **Phase 0 (P0):** Repo/service discovery + decision closure
-- **Phase 1 (P0):** API contract + domain model + validation (backend-agnostic)
-- **Phase 2 (P0/P1):** Infra query + repository + endpoint wiring (backend-specific)
-- **Phase 3 (P1):** Test expansion, observability hardening, documentation, CI checks
+- **Phase 0 (Done):** Decision closure
+  - ✅ Java Spring Boot
+  - ✅ PostgreSQL
+  - ✅ Endpoint path `/accommodations/search`
+- **Phase 1 (P0):** Repository/service bootstrap + baseline search API skeleton
+- **Phase 2 (P0):** Domain model + DB schema + repository queries for advanced filters
+- **Phase 3 (P1):** Test hardening, observability, documentation, CI improvements
 
 ---
 
 # Task Details
 
-## PH0-T01 — Repository discovery & baseline mapping
+> Note on traceability: `requirement.md` has no explicit requirement IDs; tasks reference requirement statements and the acceptance-criteria bullets.
 
-- **Phase:** 0
+## PH1-T01 — Initialize Spring Boot service skeleton
+
+- **Phase:** 1
 - **Priority:** P0
 - **Dependencies:** None
-- **Relevant requirement refs:** `requirement.md` (no explicit IDs)
-- **Relevant architecture:** `docs/Architecture.md` §4–§5 (layering; backend undecided)
+- **Relevant requirements:** “Accommodation search is available…” (precondition), advanced filters feature must be added.
+- **Relevant architecture:** Layered separation (controller/application/domain/infra)
 - **Description:**
-  - Identify where the accommodation search endpoint is implemented (controller/route).
-  - Identify the current search backend (SQL DB vs search engine vs external vendor API).
-  - Identify how amenities/propertyType data is represented today (columns, join tables, JSON, etc.).
-  - Identify existing pagination/sorting behavior and error handling patterns.
-- **Expected files/components (to inspect):**
-  - API controller/routes for accommodation search
-  - DTO/request parsing layer
-  - Search use-case/service
-  - Repository/query builder
-  - DB schema/migrations folder (if any)
+  - Create a Spring Boot project structure.
+  - Decide packaging convention reflecting layers (e.g., `com.codmei.accommodation.{api,application,domain,infra}`).
+  - Add baseline dependencies: Spring Web, Validation, Spring Data JPA, PostgreSQL driver, Flyway/Liquibase, Test (JUnit 5), Testcontainers (optional but recommended).
+  - Add health endpoint (optional) only if project standards require it.
+- **Expected files/components:**
+  - `pom.xml` (or `build.gradle`)
+  - `src/main/java/...` main application class
+  - `src/test/java/...` test skeleton
+  - `src/main/resources/application.yml`
 - **Implementation notes:**
-  - If code is not present in this repo/branch, determine source branch/repo to merge from.
+  - Keep minimal—do not introduce external integrations.
 - **Acceptance criteria:**
-  - A short “current-state map” is added to this plan (or linked doc) listing key modules and backend choice.
-- **Verification method:** Manual repo inspection + (if available) run build/test commands.
-- **Estimated effort:** 2–4 hours (assumes code exists somewhere accessible).
+  - Service builds and starts locally.
+- **Verification method:** `mvn test` and `mvn spring-boot:run` (or Gradle equivalents).
+- **Estimated effort:** 3–6 hours.
 
-## PH0-T02 — Close API contract decisions (query param encoding, pagination)
+## PH1-T02 — Define API contract for `/accommodations/search`
 
-- **Phase:** 0
+- **Phase:** 1
 - **Priority:** P0
-- **Dependencies:** PH0-T01
-- **Relevant requirement refs:** `requirement.md` acceptance criteria (AC1–AC7 in text)
-- **Relevant architecture/design:** design-review notes on API underspecification
-- **Description:** Decide and document:
-  - Amenities encoding: repeated param (e.g., `amenities=WIFI&amenities=BREAKFAST`) vs CSV.
-  - `propertyType` single value only; define error response for multi-value.
-  - Pagination: `page`/`pageSize` (or `offset`/`limit`), defaults, max pageSize.
-  - Response shape: include `total` or not.
-  - Sorting defaults if applicable.
-- **Expected files/components:** `impl-plan.md` “API Contract” section (or add `docs/api-contract.md`).
-- **Acceptance criteria:** API owner/lead approves contract decisions.
-- **Verification method:** Human approval comment in PR.
+- **Dependencies:** PH1-T01
+- **Relevant requirements:** existing search filters + new advanced filters
+- **Relevant design-review:** API contract previously underspecified
+- **Description:** Define and document request/response:
+  - Query params for existing filters (destination, dates, passengers) — exact names TBD (open question).
+  - New params:
+    - `amenities` multi-value (encoding TBD)
+    - `propertyType` single value
+  - Pagination params and defaults.
+  - Response shape: list + pagination metadata (total TBD).
+  - Error format for 400 validation failures.
+- **Expected files/components:**
+  - `impl-plan.md` (this section)
+  - optionally `docs/api-contract.md`
+- **Acceptance criteria:**
+  - Contract decisions are explicit and approved.
+- **Verification method:** Human review approval.
 - **Estimated effort:** 1–2 hours.
 
-## PH0-T03 — Close backend decision & query approach
-
-- **Phase:** 0
-- **Priority:** P0
-- **Dependencies:** PH0-T01
-- **Relevant requirement refs:** `requirement.md`
-- **Relevant architecture:** `docs/Architecture.md` §5; design-review backend ambiguity
-- **Description:** Confirm whether filtering is implemented via:
-  - A) SQL DB query changes, or
-  - B) search engine query changes, or
-  - C) external vendor API parameter mapping.
-- **Expected files/components:** Decision recorded in plan.
-- **Acceptance criteria:** Backend approach explicitly approved.
-- **Verification method:** Human approval.
-- **Estimated effort:** 0.5–1 hour.
-
-## PH1-T01 — Define filter domain enums & criteria model
+## PH1-T03 — Implement request DTOs + validation + error handling
 
 - **Phase:** 1
 - **Priority:** P0
-- **Dependencies:** PH0-T02
-- **Relevant requirement refs:** Amenities + property type filters
-- **Relevant architecture:** layered separation; extensible criteria model
+- **Dependencies:** PH1-T02
+- **Relevant requirements:** filter selection; invalid input => 400 (design review)
 - **Description:**
-  - Define allowlisted enum values for Amenities: Free Wi‑Fi, Breakfast included.
-  - Define allowlisted enum values for PropertyType: Hotel, Villa.
-  - Define a criteria object that composes with existing criteria.
-  - Encode semantics (AND across categories; amenities ALL/AND) in domain/application layer.
-- **Expected files/components:**
-  - `domain/` enums + criteria
-  - `application/` use-case request model
-- **Implementation notes:** Names must match API encoding decision.
-- **Acceptance criteria:**
-  - Criteria model supports optional filters.
-  - Unit tests demonstrate semantics.
-- **Verification method:** Unit test execution.
-- **Estimated effort:** 4–8 hours (depends on existing structure).
-
-## PH1-T02 — API request parsing + validation rules
-
-- **Phase:** 1
-- **Priority:** P0
-- **Dependencies:** PH0-T02, PH1-T01
-- **Relevant requirement refs:** filter selection behaviors; backward compatibility
-- **Relevant design-review:** invalid cases => 400; propertyType single-select
-- **Description:**
-  - Parse new query params.
+  - Implement controller accepting `/accommodations/search`.
+  - Parse query params into a request object.
   - Validate:
-    - invalid enum values => 400
-    - too many amenities values => 400 (guardrail; limit to a small number like 10 unless existing standards differ)
-    - multiple propertyType values => 400
-  - Ensure missing params produce current behavior.
-  - Standardize error response format per existing API conventions.
+    - `propertyType` must be single value
+    - `amenities` values must be allowlisted
+    - pagination bounds
+  - Implement global exception handler to return consistent 400 responses.
 - **Expected files/components:**
-  - Controller/route handler
-  - Request DTO + validator
-  - Error mapping/middleware
+  - `api/AccommodationSearchController.java`
+  - `api/dto/AccommodationSearchRequest.java`
+  - `api/error/ApiError.java`, `api/error/RestExceptionHandler.java`
 - **Acceptance criteria:**
-  - Valid requests accepted.
-  - Invalid propertyType multi-value rejected with 400.
-  - Invalid enum rejected with 400.
-- **Verification method:** Unit tests + API/contract tests.
-- **Estimated effort:** 6–12 hours.
+  - Invalid values return 400 with clear message.
+- **Verification method:** MVC tests (`@WebMvcTest`) for validation cases.
+- **Estimated effort:** 6–10 hours.
 
-## PH2-T01 — Update search use-case to apply advanced filters
+## PH2-T01 — Domain enums and filter semantics
 
 - **Phase:** 2
 - **Priority:** P0
-- **Dependencies:** PH1-T01, PH1-T02, PH0-T03
-- **Relevant requirement refs:** AC1–AC7
-- **Relevant architecture:** application layer orchestrates; infra builds queries
+- **Dependencies:** PH1-T02
+- **Relevant requirements:** amenities/property type filter options
+- **Relevant design-review decisions:** amenities ALL/AND; AND across categories
 - **Description:**
-  - Extend search use-case/service to accept criteria and pass to repository.
-  - Ensure composition with existing filters.
-  - Ensure empty match returns empty list (client shows “No results found”).
-- **Expected files/components:** `application/search*` use-case/service
+  - Define `Amenity` enum: WIFI, BREAKFAST (names mapped to UI labels “Free Wi‑Fi”, “Breakfast included”).
+  - Define `PropertyType` enum: HOTEL, VILLA.
+  - Define a `SearchCriteria` domain object.
+  - Encode semantics in application layer: AND across filters; amenities require all selected.
+- **Expected files/components:**
+  - `domain/Amenity.java`, `domain/PropertyType.java`
+  - `domain/SearchCriteria.java`
+  - `application/SearchCriteriaMapper.java` (API → domain)
 - **Acceptance criteria:**
-  - Combined filters behave as AND.
-  - No-match returns empty list.
-  - Existing search without new filters unchanged.
-- **Verification method:** Integration tests with fixture data.
-- **Estimated effort:** 6–12 hours.
+  - Unit tests cover semantics.
+- **Verification method:** `mvn test` (unit).
+- **Estimated effort:** 4–8 hours.
 
-## PH2-T02 — Infra query/repository implementation (backend-specific)
+## PH2-T02 — PostgreSQL schema & migrations
 
 - **Phase:** 2
 - **Priority:** P0
-- **Dependencies:** PH2-T01, PH0-T03
-- **Relevant requirement refs:** AC1–AC7
-- **Relevant architecture:** performance/indexing considerations
-- **Description (SQL path):**
-  - Map criteria to SQL predicates.
-  - Amenities ALL/AND semantics (e.g., group/having count match, array containment, or join strategy depending on schema).
-  - PropertyType equality predicate.
-  - Ensure pagination & sorting consistent.
-
-  **Description (search engine path):**
-  - Map to bool must filters; amenities must contain all selected.
-  - PropertyType term filter.
-
-- **Expected files/components:** `infra/repository`, query builder.
+- **Dependencies:** PH1-T01, PH2-T01
+- **Relevant requirements:** accommodation records support amenities/property type
+- **Description:**
+  - Create baseline schema to support searching accommodations with:
+    - destination (TBD representation)
+    - capacity/passengers
+    - propertyType
+    - amenities (multi)
+  - Choose amenities persistence strategy (open question): join table vs Postgres array.
+  - Add indexes to support filters.
+- **Expected files/components:**
+  - `src/main/resources/db/migration/V1__init.sql` (Flyway) or Liquibase changelog
 - **Acceptance criteria:**
-  - Correctness: amenities ALL/AND verified.
-  - Performance: uses indexes/fields appropriately (as feasible).
-- **Verification method:** Integration tests + query-level tests.
-- **Estimated effort:**
-  - SQL: 8–16 hours depending on schema.
-  - Search engine: 6–12 hours depending on existing client.
+  - Migrations apply cleanly on empty DB.
+- **Verification method:** Start app with Postgres; verify Flyway runs.
+- **Estimated effort:** 6–14 hours.
 
-## PH2-T03 — Data model/migrations (if required)
+## PH2-T03 — Persistence layer (JPA entities + repository queries)
 
 - **Phase:** 2
-- **Priority:** P1
-- **Dependencies:** PH0-T01, PH0-T03
-- **Relevant requirement refs:** precondition: records support amenities/propertyType
+- **Priority:** P0
+- **Dependencies:** PH2-T02
+- **Relevant requirements:** filtering behavior
 - **Description:**
-  - If schema does not already support required fields, add migrations:
-    - propertyType column/enum
-    - amenities representation (join table / array / JSON)
-  - Add indexes for filter fields.
-  - Add seed/test data for new attributes.
-- **Expected files/components:** migrations + seed scripts.
+  - Define JPA entities and mappings for accommodations and amenities.
+  - Implement repository query that applies:
+    - destination/date/passengers (as defined)
+    - propertyType equality
+    - amenities ALL/AND
+  - Implement pagination.
+- **Expected files/components:**
+  - `infra/jpa/AccommodationEntity.java`, etc.
+  - `infra/jpa/AccommodationRepository.java`
+  - custom query implementation if needed.
 - **Acceptance criteria:**
-  - Schema supports querying required attributes.
-  - Migration is reversible where applicable.
-- **Verification method:** Migration apply/rollback in CI/dev; integration tests.
-- **Estimated effort:** 8–20 hours (high variance).
+  - Query returns correct results for each combination.
+- **Verification method:** `@DataJpaTest` + Testcontainers Postgres.
+- **Estimated effort:** 10–20 hours (depends on chosen schema/query approach).
 
-## PH3-T01 — Contract & integration test suite
+## PH2-T04 — Application service/use-case wiring
+
+- **Phase:** 2
+- **Priority:** P0
+- **Dependencies:** PH1-T03, PH2-T03
+- **Relevant requirements:** end-to-end search with advanced filters
+- **Description:**
+  - Implement `AccommodationSearchService` that:
+    - maps API request → domain criteria
+    - calls repository
+    - maps entity → response DTO
+  - Ensure empty match returns empty list.
+- **Expected files/components:**
+  - `application/AccommodationSearchService.java`
+  - `api/dto/AccommodationSearchResponse.java` (and item DTO)
+- **Acceptance criteria:**
+  - Endpoint returns filtered results.
+- **Verification method:** Integration tests (`@SpringBootTest`).
+- **Estimated effort:** 6–12 hours.
+
+## PH3-T01 — Contract tests + integration tests
 
 - **Phase:** 3
 - **Priority:** P0
-- **Dependencies:** PH1-T02, PH2-T02
-- **Relevant requirement refs:** AC1–AC7
+- **Dependencies:** PH2-T04
+- **Relevant requirements:** all scenarios + no results
 - **Description:**
-  - Add integration tests for:
-    - each amenity filter
+  - Add integration tests using Postgres (Testcontainers) for:
+    - amenity filter (single)
+    - amenity filter (both) => requires ALL
     - propertyType filter
     - combined filters
-    - no results
-    - backward compatibility (no new params)
-  - Add API contract tests for query param encoding.
-- **Expected files/components:** `tests/integration/*`, `tests/contract/*`
-- **Acceptance criteria:** Coverage for main scenarios and error cases.
-- **Verification method:** CI test run.
+    - invalid propertyType multi-value => 400
+    - invalid amenity => 400
+    - no results => empty list
+- **Expected files/components:** `src/test/java/.../AccommodationSearchIT.java`
+- **Acceptance criteria:** tests cover core acceptance scenarios.
+- **Verification method:** CI/local `mvn test`.
 - **Estimated effort:** 8–16 hours.
 
-## PH3-T02 — Observability, security, and guardrails
+## PH3-T02 — Observability & guardrails
 
 - **Phase:** 3
 - **Priority:** P1
-- **Dependencies:** PH1-T02, PH2-T02
-- **Relevant architecture:** performance/maintainability goals
+- **Dependencies:** PH1-T03, PH2-T04
 - **Description:**
-  - Add structured logs for validation failures and query execution timing (avoid PII).
-  - Enforce pagination bounds and max filter cardinality.
-  - Add rate-limit hooks if existing platform supports it (do not introduce new external services).
-- **Expected files/components:** logging middleware, metrics hooks.
-- **Acceptance criteria:**
-  - Logs/metrics present and consistent.
-  - Abuse guardrails verified by tests.
-- **Verification method:** unit/integration tests; log assertion where feasible.
-- **Estimated effort:** 4–10 hours.
+  - Add request logging (method/path/status/duration) and validation failure logging.
+  - Ensure logs do not contain PII.
+  - Add max `pageSize` enforcement.
+- **Expected files/components:** logging config + possibly servlet filter/interceptor.
+- **Acceptance criteria:** logs present; guardrails tested.
+- **Verification method:** integration test asserts 400 for excessive pageSize.
+- **Estimated effort:** 4–8 hours.
 
-## PH3-T03 — Documentation updates
+## PH3-T03 — Documentation & CI
 
 - **Phase:** 3
 - **Priority:** P1
-- **Dependencies:** PH0-T02, PH1-T02
+- **Dependencies:** PH1-T02, PH3-T01
 - **Description:**
-  - Update API docs with new filters, encoding examples, and error responses.
-  - Add examples for AND semantics.
-- **Expected files/components:** `docs/*` (e.g., `docs/api-contract.md`) and/or README.
-- **Acceptance criteria:** docs match implementation and tests.
-- **Verification method:** PR review.
-- **Estimated effort:** 2–4 hours.
+  - Update README with local run instructions (Postgres, migrations, tests).
+  - Add GitHub Actions workflow (if not present) running build + tests.
+- **Expected files/components:** `.github/workflows/ci.yml`, `README.md`
+- **Acceptance criteria:** CI passes on PR.
+- **Verification method:** GitHub Actions run.
+- **Estimated effort:** 3–6 hours.
 
 ---
 
@@ -298,96 +283,88 @@ Ordered by authority as applied in this repo:
 
 | Task | Depends on |
 | --- | --- |
-| PH0-T02 | PH0-T01 |
-| PH0-T03 | PH0-T01 |
-| PH1-T01 | PH0-T02 |
-| PH1-T02 | PH0-T02, PH1-T01 |
-| PH2-T01 | PH1-T01, PH1-T02, PH0-T03 |
-| PH2-T02 | PH2-T01, PH0-T03 |
-| PH2-T03 | PH0-T01, PH0-T03 |
-| PH3-T01 | PH1-T02, PH2-T02 |
-| PH3-T02 | PH1-T02, PH2-T02 |
-| PH3-T03 | PH0-T02, PH1-T02 |
+| PH1-T02 | PH1-T01 |
+| PH1-T03 | PH1-T02 |
+| PH2-T01 | PH1-T02 |
+| PH2-T02 | PH1-T01, PH2-T01 |
+| PH2-T03 | PH2-T02 |
+| PH2-T04 | PH1-T03, PH2-T03 |
+| PH3-T01 | PH2-T04 |
+| PH3-T02 | PH1-T03, PH2-T04 |
+| PH3-T03 | PH1-T02, PH3-T01 |
 
 ---
 
 # Requirements Traceability Matrix
 
-> The requirements doc does not define IDs; traceability is by requirement statement/acceptance-criteria text.
-
 | Requirement / Acceptance criteria (from `requirement.md`) | Tasks |
 | --- | --- |
-| Add amenity filters: Free Wi‑Fi, Breakfast included | PH1-T01, PH1-T02, PH2-T01, PH2-T02, PH3-T01 |
-| Add property type filters: Hotel, Villa | PH1-T01, PH1-T02, PH2-T01, PH2-T02, PH3-T01 |
-| Both Amenities + PropertyType match all selected criteria | PH1-T01, PH2-T01, PH2-T02, PH3-T01 |
-| No matches => “No results found” (empty list from API) | PH2-T01, PH3-T01 |
-| Backward compatibility with existing search | PH1-T02, PH2-T01, PH3-T01 |
-| propertyType multi-select invalid => 400 | PH1-T02, PH3-T01 |
+| Add amenity filters (Free Wi‑Fi, Breakfast included) | PH2-T01, PH2-T03, PH2-T04, PH3-T01 |
+| Add property type filters (Hotel, Villa) | PH2-T01, PH2-T03, PH2-T04, PH3-T01 |
+| Selecting both amenities and property type returns matches for all criteria | PH2-T01, PH2-T03, PH3-T01 |
+| No accommodations match => return empty list | PH2-T04, PH3-T01 |
+| Existing filters still work (destination/dates/passengers) | PH1-T02, PH2-T03, PH3-T01 |
+| Invalid multi-value propertyType => 400 | PH1-T03, PH3-T01 |
 
 ---
 
 # Testing Strategy
 
-1. **Unit tests**
-   - Criteria semantics (amenities ALL/AND; AND across categories).
-   - Validation: invalid enums, multiple propertyType values.
-2. **Integration tests**
-   - End-to-end search with seeded data to validate filtering.
-   - Pagination bounds.
-3. **Contract tests**
-   - Query param encoding agreed in PH0-T02.
-4. **Non-functional checks**
-   - Basic performance sanity for filtered queries (timing logs/metrics).
-   - Concurrency: ensure repository/query code is stateless and safe under parallel requests.
+- **Unit:** domain semantics, enum mapping, validators.
+- **Web/MVC:** 400 error scenarios and request parsing.
+- **JPA:** repository query correctness using Postgres.
+- **Integration:** `/accommodations/search` end-to-end with seeded data.
+- **Non-functional:** pagination limit and basic concurrency (parallel test execution) to ensure statelessness.
 
 ---
 
 # Definition of Done
 
-- `impl-plan.md` approved.
-- PH0 decisions (API contract + backend) approved.
-- Implementation merged with:
-  - new filters working and validated
-  - backward compatibility proven by tests
-  - error cases return 400 as defined
-  - tests passing in CI
-  - documentation updated
+- Service skeleton exists and runs.
+- `/accommodations/search` implemented with advanced filters.
+- Validation and 400 error handling implemented per design-review decisions.
+- Postgres migrations defined and reproducible.
+- Tests pass locally and in CI.
+- Docs updated.
 
 ---
 
 # Risks and Mitigations
 
-- **Risk:** Codebase not present in this repo branch.
-  - **Mitigation:** PH0-T01 to identify merge source; do not start PH1–PH3 coding until resolved.
-- **Risk:** Backend choice unclear causes rework.
-  - **Mitigation:** PH0-T03 before infra tasks.
-- **Risk:** Amenities ALL/AND semantics can be expensive in SQL depending on schema.
-  - **Mitigation:** Add appropriate indexes; choose containment strategy suited to schema.
+- **Underspecified existing filters contract (destination/dates/passengers):**
+  - Mitigation: finalize names/types in PH1-T02; keep changes minimal.
+- **Amenities ALL/AND query complexity:**
+  - Mitigation: choose schema to support containment efficiently; index accordingly.
+- **Greenfield scope exceeds original assumption of “add filters to existing system”:**
+  - Mitigation: align expectations; ensure base search functionality is in scope.
 
 ---
 
 # Open Questions and Blockers
 
-1. Where is the actual accommodation search service code for this project (this repo currently has docs only)?
-2. What is the current search backend (SQL vs search engine vs vendor API)?
-3. What is the existing endpoint path and pagination convention?
-4. Do accommodations already store amenities/propertyType and are they populated?
-5. Any auth/rate limit requirements for the search endpoint?
+1. Confirm **amenities query param encoding**: repeated vs CSV.
+2. Confirm **pagination contract**: `page/pageSize` vs `offset/limit`, defaults, max.
+3. Confirm whether response must include **`total`** count.
+4. Specify exact contract for existing filters: destination format, date representation, passengers field.
+5. Any authentication/authorization requirements? (none stated in approved docs).
 
 ---
 
 # Implementation Sequence
 
-1. **PH0-T01** (discover code + current backend)
-2. **PH0-T02** (finalize API contract)
-3. **PH0-T03** (confirm backend approach)
-4. **PH1-T01 → PH1-T02** (domain model + validation)
-5. **PH2-T01 → PH2-T02** (use-case + infra query)
-6. **PH2-T03** (migrations if needed)
-7. **PH3-T01 → PH3-T03** (tests, observability, docs)
+1. PH1-T01 (bootstrap Spring Boot)
+2. PH1-T02 (finalize API contract)
+3. PH1-T03 (controller + validation + error handling)
+4. PH2-T01 (domain semantics)
+5. PH2-T02 (migrations)
+6. PH2-T03 (repository queries)
+7. PH2-T04 (use-case/service wiring)
+8. PH3-T01 (integration/contract tests)
+9. PH3-T02 (observability/guardrails)
+10. PH3-T03 (docs/CI)
 
 ---
 
 # Final Planning Summary
 
-This plan introduces advanced accommodation search filters for Amenities (Free Wi‑Fi, Breakfast included) and Property Type (Hotel, Villa) while preserving backward compatibility. The critical path is closing PH0 decisions (API contract + backend) and then implementing validation/semantics (amenities ALL/AND, propertyType single-select) followed by backend-specific query changes and a comprehensive integration/contract test suite.
+We will implement the Advanced Accommodation Search Filters as a **new Spring Boot + PostgreSQL** service exposing `GET /accommodations/search`. The plan prioritizes contract finalization and validation semantics (amenities ALL/AND; propertyType single-select) before implementing Postgres schema/query logic and comprehensive integration tests. Remaining open questions are limited to API encoding/pagination/total and the exact shape of the legacy filters.
